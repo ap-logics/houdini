@@ -36,9 +36,12 @@ def main():
 
             if people:
                 person = people[0]
-                gesture.update(person, dt)
-                canvas.update(gesture)
+                gesture.update(person, dt, now)
+                canvas.update(gesture, dt)
                 draw_skeleton(frame, people, COLORS)
+            else:
+                # Keep smoothing even with no hands visible
+                canvas.update_smooth(dt)
 
             # When the shape is closed, apply xray effect inside it
             if canvas.closed and len(canvas.vertices) >= 3:
@@ -57,9 +60,14 @@ def main():
             frame = canvas.render(frame)
 
             # HUD
-            mode = "EDIT" if canvas.closed else "DRAW"
+            if canvas.erasing:
+                mode = "ERASE"
+            elif canvas.closed:
+                mode = "EDIT"
+            else:
+                mode = "DRAW"
             n = len(canvas.vertices)
-            hud = f"{mode} | {n} verts | pinch=place  clap=clear"
+            hud = f"{mode} | {n} verts | pinch=place  wave=erase  dbl-click=clear"
             cv2.putText(frame, hud, (10, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
 

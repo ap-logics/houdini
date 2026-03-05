@@ -96,12 +96,13 @@ def _warp_box(box, dz):
 
 
 def get_hands(frame: np.ndarray) -> list | None:
-    """Detect hands and return per-person skeleton + perspective-warped box.
+    """Detect hands and return per-person data.
 
-    Returns None if no complete hand pairs found.
+    Returns None if no hands detected.
     Returns a list of person dicts, each with:
-        "hands": [left_landmarks, right_landmarks]  (21 (x,y) normalised each)
-        "box": [(x1,y1), (x2,y2), (x3,y3), (x4,y4)] warped normalised corners
+        "hands": [landmarks, ...]  (1 or 2 hands, each 21 (x,y) normalised)
+        "handedness": [str, ...]   ("Left" or "Right" per hand)
+        "box": [...] or None       (warped box if 2 hands, None if 1)
     """
     global _frame_ts
     _frame_ts += 33
@@ -110,59 +111,84 @@ def get_hands(frame: np.ndarray) -> list | None:
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
     result = _landmarker.detect_for_video(mp_image, _frame_ts)
 
-    if not result.hand_landmarks or len(result.hand_landmarks) < 2:
+    if not result.hand_landmarks:
         return None
 
-    # Bucket hands by handedness — keep Z
-    lefts = []
-    rights = []
+    # Build per-hand data with handedness
+    all_hands = []
     for i, hand_landmarks in enumerate(result.hand_landmarks):
-        landmarks = [(lm.x, lm.y, lm.z) for lm in hand_landmarks]
+        landmarks_3d = [(lm.x, lm.y, lm.z) for lm in hand_landmarks]
+        landmarks_2d = [(lm.x, lm.y) for lm in hand_landmarks]
         handedness = result.handedness[i][0].category_name
-        if handedness == "Left":
-            lefts.append(landmarks)
-        else:
-            rights.append(landmarks)
+        all_hands.append({
+            "landmarks_3d": landmarks_3d,
+            "landmarks_2d": landmarks_2d,
+            "handedness": handedness,
+        })
 
-    # If all detected as same handedness, split by x-position of wrist
-    if not lefts or not rights:
-        all_hands = [[(lm.x, lm.y, lm.z) for lm in h] for h in result.hand_landmarks]
-        all_hands.sort(key=lambda lm: lm[WRIST][0])
-        mid = len(all_hands) // 2
-        lefts = all_hands[mid:]
-        rights = all_hands[:mid]
-
-    pairs = _pair_hands(lefts, rights)
-    if not pairs:
-        return None
+    # Group into people by pairing left+right hands near each other
+    lefts = [h for h in all_hands if h["handedness"] == "Left"]
+    rights = [h for h in all_hands if h["handedness"] == "Right"]
 
     people = []
-    for idx, (left, right) in enumerate(pairs):
-        # Compute smoothed depth delta
-        raw_dz = _wrist_z(left) - _wrist_z(right)
-        prev = _smooth_dz.get(idx, 0.0)
-        smoothed = prev + SMOOTH_ALPHA * (raw_dz - prev)
-        _smooth_dz[idx] = smoothed
+    used_lefts = set()
+    used_rights = set()
 
-        # 2D box corners from thumb/index tips
-        flat_box = [
-            (left[INDEX_TIP][0], left[INDEX_TIP][1]),
-            (right[INDEX_TIP][0], right[INDEX_TIP][1]),
-            (right[THUMB_TIP][0], right[THUMB_TIP][1]),
-            (left[THUMB_TIP][0], left[THUMB_TIP][1]),
-        ]
-        warped_box = _warp_box(flat_box, smoothed)
+    # First: pair lefts and rights by wrist proximity
+    if lefts and rights:
+        left_3d = [h["landmarks_3d"] for h in lefts]
+        right_3d = [h["landmarks_3d"] for h in rights]
+        pairs = _pair_hands(left_3d, right_3d)
+        for left_lm, right_lm in pairs:
+            li = next(i for i, h in enumerate(lefts) if h["landmarks_3d"] is left_lm)
+            ri = next(i for i, h in enumerate(rights) if h["landmarks_3d"] is right_lm)
+            used_lefts.add(li)
+            used_rights.add(ri)
 
-        # Strip Z for skeleton drawing data
-        hands_2d = [[(x, y) for x, y, z in h] for h in (left, right)]
-        people.append({"hands": hands_2d, "box": warped_box})
+            raw_dz = _wrist_z(left_lm) - _wrist_z(right_lm)
+            idx = len(people)
+            prev = _smooth_dz.get(idx, 0.0)
+            smoothed = prev + SMOOTH_ALPHA * (raw_dz - prev)
+            _smooth_dz[idx] = smoothed
+
+            flat_box = [
+                (left_lm[INDEX_TIP][0], left_lm[INDEX_TIP][1]),
+                (right_lm[INDEX_TIP][0], right_lm[INDEX_TIP][1]),
+                (right_lm[THUMB_TIP][0], right_lm[THUMB_TIP][1]),
+                (left_lm[THUMB_TIP][0], left_lm[THUMB_TIP][1]),
+            ]
+            warped_box = _warp_box(flat_box, smoothed)
+
+            left_2d = [(x, y) for x, y, z in left_lm]
+            right_2d = [(x, y) for x, y, z in right_lm]
+            people.append({
+                "hands": [left_2d, right_2d],
+                "handedness": ["Left", "Right"],
+                "box": warped_box,
+            })
+
+    # Then: add unpaired hands as solo entries
+    for i, h in enumerate(lefts):
+        if i not in used_lefts:
+            people.append({
+                "hands": [h["landmarks_2d"]],
+                "handedness": [h["handedness"]],
+                "box": None,
+            })
+    for i, h in enumerate(rights):
+        if i not in used_rights:
+            people.append({
+                "hands": [h["landmarks_2d"]],
+                "handedness": [h["handedness"]],
+                "box": None,
+            })
 
     # Clean up stale smoothing entries
     for k in list(_smooth_dz):
-        if k >= len(pairs):
+        if k >= len(people):
             del _smooth_dz[k]
 
-    return people
+    return people if people else None
 
 
 def draw_skeleton(
@@ -175,6 +201,8 @@ def draw_skeleton(
     for i, person in enumerate(people):
         color = colors[i % len(colors)]
         for landmarks in person["hands"]:
+            if len(landmarks) < 21:
+                continue
             for a, b in HAND_CONNECTIONS:
                 pt1 = (int(landmarks[a][0] * w), int(landmarks[a][1] * h))
                 pt2 = (int(landmarks[b][0] * w), int(landmarks[b][1] * h))
