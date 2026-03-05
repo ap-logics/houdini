@@ -55,6 +55,7 @@ class HandState:
 
         # Pinch
         dist = ((thumb[0] - index[0]) ** 2 + (thumb[1] - index[1]) ** 2) ** 0.5
+
         was_pinching = self.pinching
         if self.pinching:
             if dist > PINCH_EXIT:
