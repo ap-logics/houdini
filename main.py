@@ -3,9 +3,7 @@ import cv2
 from camera import open_camera
 from hands import get_hands, draw_skeleton
 from overlay import OverlayStack, BoxOverlay
-from overlay.effects.obj_content import ObjContent
-
-OBJ_PATH = "objects/gun.obj"
+from overlay.effects.xray import XRayContent
 
 COLORS = [
     (0, 255, 128),
@@ -58,7 +56,7 @@ def main():
                 for i, person in enumerate(people):
                     quad = tuple(tuple(p) for p in person["box"])
                     if i >= len(overlays):
-                        ov = BoxOverlay(ObjContent(OBJ_PATH), alpha=0.9)
+                        ov = BoxOverlay(XRayContent(), alpha=0.9)
                         ov.add_region(quad)
                         stack.add(ov)
                         overlays.append(ov)
