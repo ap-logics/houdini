@@ -7,4 +7,6 @@ requires-python = ">=3.13"
 dependencies = [
     "mediapipe>=0.10.32",
     "opencv-python>=4.10",
+    "pyopengl>=3.1.10",
+    "trimesh>=4.11.2",
 ]
