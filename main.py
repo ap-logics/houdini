@@ -5,7 +5,7 @@ from hands import get_hands, draw_skeleton
 from gestures import GestureDetector
 from draw import DrawState
 from overlay import OverlayStack, ShapeOverlay
-from overlay.effects.xray import XRayContent
+from overlay.effects.specter import ElectricSpecterContent
 
 COLORS = [
     (0, 255, 128),
@@ -46,10 +46,10 @@ def main():
             # When the shape is closed, apply xray effect inside it
             if canvas.closed and len(canvas.vertices) >= 3:
                 if xray_overlay is None:
-                    xray_overlay = ShapeOverlay(XRayContent(), alpha=0.85)
+                    xray_overlay = ShapeOverlay(ElectricSpecterContent(), alpha=1.0)
                     stack.add(xray_overlay)
                 xray_overlay.set_polygon(canvas.vertices)
-                xray_overlay.alpha = 0.85
+                xray_overlay.alpha = 1.0
             elif xray_overlay is not None:
                 xray_overlay.alpha = 0.0
 

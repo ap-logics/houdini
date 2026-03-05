@@ -123,7 +123,7 @@ class DrawState:
             if self.erasing:
                 edge_color = (0, 0, 255)
             elif self.closed:
-                edge_color = (0, 255, 200)
+                edge_color = (0, 255, 0)
             else:
                 edge_color = (0, 200, 255)
             n = len(pts_px)
@@ -131,14 +131,7 @@ class DrawState:
             for i in range(limit):
                 cv2.line(out, pts_px[i], pts_px[(i + 1) % n], edge_color, 2, cv2.LINE_AA)
 
-        # Draw fill if closed
-        if self.closed and len(pts_px) >= 3 and not self.erasing:
-            overlay = out.copy()
-            poly = np.array(pts_px, dtype=np.int32)
-            cv2.fillPoly(overlay, [poly], (0, 255, 200))
-            out = cv2.addWeighted(overlay, 0.15, out, 0.85, 0)
-
-        # Draw vertices
+# Draw vertices
         for i, pt in enumerate(pts_px):
             is_grabbed = self.closed and self._grabbed == i
             if self.erasing:
