@@ -6,6 +6,7 @@ from gestures import GestureDetector
 from draw import DrawState
 from overlay import OverlayStack, ShapeOverlay
 from overlay.effects.specter import ElectricSpecterContent
+from edge_effects import NeonPulseEdge
 
 COLORS = [
     (0, 255, 128),
@@ -20,6 +21,8 @@ def main():
     canvas = DrawState()
     stack = OverlayStack()
     xray_overlay = None
+    effects_on = True
+    canvas.edge_effect = NeonPulseEdge()
 
     with open_camera() as cam:
         prev = time.time()
@@ -49,7 +52,7 @@ def main():
                     xray_overlay = ShapeOverlay(ElectricSpecterContent(), alpha=1.0)
                     stack.add(xray_overlay)
                 xray_overlay.set_polygon(canvas.vertices)
-                xray_overlay.alpha = 1.0
+                xray_overlay.alpha = 1.0 if effects_on else 0.0
             elif xray_overlay is not None:
                 xray_overlay.alpha = 0.0
 
@@ -67,13 +70,18 @@ def main():
             else:
                 mode = "DRAW"
             n = len(canvas.vertices)
-            hud = f"{mode} | {n} verts | pinch=place  wave=erase  dbl-click=clear"
+            glow = "glow:ON" if canvas.edge_effect else "glow:off"
+            hud = f"{mode} | {n} verts | pinch=place  wave=erase  dbl-click=clear  e={glow}"
             cv2.putText(frame, hud, (10, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
 
             cv2.imshow("houdini", frame)
-            if cv2.waitKey(1) & 0xFF == ord("q"):
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord("q"):
                 break
+            elif key == ord("e"):
+                effects_on = not effects_on
+                canvas.edge_effect = NeonPulseEdge() if effects_on else None
 
     cv2.destroyAllWindows()
 

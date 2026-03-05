@@ -11,6 +11,8 @@ Either hand can pinch to interact.
 Display vertices are smoothly interpolated toward logical vertices each frame.
 """
 
+import time
+
 import cv2
 import numpy as np
 
@@ -29,6 +31,8 @@ class DrawState:
         self.closed = False
         self.erasing = False
         self._grabbed = None
+        self.edge_effect = None   # EdgeEffect instance or None; set externally
+        self._t0 = time.monotonic()  # reference for effect animation
 
     def clear(self):
         self.vertices.clear()
@@ -120,16 +124,20 @@ class DrawState:
 
         # Draw edges
         if len(pts_px) >= 2:
-            if self.erasing:
-                edge_color = (0, 0, 255)
-            elif self.closed:
-                edge_color = (0, 255, 0)
+            if self.closed and self.edge_effect is not None:
+                t = time.monotonic() - self._t0
+                out = self.edge_effect.render(out, pts_px, t)
             else:
-                edge_color = (0, 200, 255)
-            n = len(pts_px)
-            limit = n if self.closed else n - 1
-            for i in range(limit):
-                cv2.line(out, pts_px[i], pts_px[(i + 1) % n], edge_color, 2, cv2.LINE_AA)
+                if self.erasing:
+                    edge_color = (0, 0, 255)
+                elif self.closed:
+                    edge_color = (0, 255, 0)
+                else:
+                    edge_color = (0, 200, 255)
+                n = len(pts_px)
+                limit = n if self.closed else n - 1
+                for i in range(limit):
+                    cv2.line(out, pts_px[i], pts_px[(i + 1) % n], edge_color, 2, cv2.LINE_AA)
 
 # Draw vertices
         for i, pt in enumerate(pts_px):
