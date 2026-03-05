@@ -88,6 +88,20 @@ def render(cam_tex_id: int, scene_tex_id: int, cx: float, cy: float, radius: flo
 
 ---
 
+## Progress
+
+- [x] `camera/` package — plugin system with `CameraSource` base, `@register(priority)` decorator, `open_camera()` factory
+  - `camera/opencv.py` — generic fallback (priority 0)
+  - `camera/avfoundation.py` — Apple Silicon specialisation (priority 10): explicit `CAP_AVFOUNDATION`, BGRA pixel format, 1-frame OS buffer, ffmpeg-based device name lookup
+- [x] `main.py` — basic `cv2.imshow` loop wired to camera; press `q` to quit
+- [ ] `hands.py` — not started
+- [ ] `particles.py` — not started
+- [ ] `portal.py` — not started
+
+Run: `uv run main.py`
+
+---
+
 ## Known constraints / gotchas
 
 - MediaPipe hand detection struggles with fast movement and poor lighting — good demo lighting matters
