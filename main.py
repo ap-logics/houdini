@@ -1,45 +1,51 @@
+import time
 import cv2
-import numpy as np
 from camera import open_camera
-from hands import get_hands, HAND_CONNECTIONS
+from hands import get_hands
+from overlay import OverlayStack, BoxOverlay
+from overlay.effects.solid import SolidContent
+
+COLORS = [(0, 200, 255), (255, 100, 0), (0, 255, 150), (200, 0, 255)]
 
 def main():
+    stack = OverlayStack()
+    overlays: list[BoxOverlay] = []
+
     with open_camera() as cam:
+        prev = time.time()
         while True:
             frame = cam.read()
             if frame is None:
                 continue
 
-            h, w = frame.shape[:2]
+            now = time.time()
+            dt, prev = now - prev, now
+
             people = get_hands(frame)
 
-            COLORS = [
-                (0, 255, 0), (255, 255, 0), (0, 255, 255), (255, 0, 255),
-            ]
             if people:
-                for idx, person in enumerate(people):
-                    color = COLORS[idx % len(COLORS)]
-                    box_color = (0, 0, 255)
+                for i, person in enumerate(people):
+                    quad = tuple(tuple(p) for p in person["box"])
+                    if i >= len(overlays):
+                        ov = BoxOverlay(SolidContent(COLORS[i % len(COLORS)]), alpha=0.5)
+                        ov.add_region(quad)
+                        stack.add(ov)
+                        overlays.append(ov)
+                    else:
+                        overlays[i].alpha = 0.5
+                        overlays[i].set_region(0, quad)
+                for i in range(len(people), len(overlays)):
+                    overlays[i].alpha = 0.0
+            else:
+                for ov in overlays:
+                    ov.alpha = 0.0
 
-                    for landmarks in person["hands"]:
-                        for a, b in HAND_CONNECTIONS:
-                            pt1 = (int(landmarks[a][0] * w), int(landmarks[a][1] * h))
-                            pt2 = (int(landmarks[b][0] * w), int(landmarks[b][1] * h))
-                            cv2.line(frame, pt1, pt2, color, 2)
-                        for lx, ly in landmarks:
-                            cv2.circle(frame, (int(lx * w), int(ly * h)), 3, color, -1)
-
-                    box_px = np.array(
-                        [(int(x * w), int(y * h)) for x, y in person["box"]],
-                        dtype=np.int32,
-                    )
-                    cv2.polylines(frame, [box_px], isClosed=True, color=box_color, thickness=2)
-                    for pt in box_px:
-                        cv2.circle(frame, tuple(pt), 6, box_color, -1)
-
+            stack.update(dt)
+            frame = stack.render(frame)
             cv2.imshow("houdini", frame)
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
+
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":
