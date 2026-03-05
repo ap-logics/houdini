@@ -7,6 +7,13 @@ from overlay.effects.obj_content import ObjContent
 
 OBJ_PATH = "objects/gun.obj"
 
+COLORS = [
+    (0, 255, 128),
+    (0, 128, 255),
+    (255, 64, 0),
+    (255, 0, 200),
+]
+
 
 def _sync_overlays(
     people: list | None,
@@ -64,8 +71,6 @@ def main():
             else:
                 for ov in overlays:
                     ov.alpha = 0.0
-                
-            _sync_overlays(people, overlays, stack)
 
             stack.update(dt)
             frame = stack.render(frame)
