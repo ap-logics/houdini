@@ -31,6 +31,6 @@ Available content types:
     overlay.effects.GlitchContent  — scan-line / channel glitch (stub)
 """
 
-from .base import BoxContent, BoxOverlay, OverlayStack, Quad
+from .base import BoxContent, BoxOverlay, OverlayStack, Quad, ShapeOverlay
 
-__all__ = ["BoxContent", "BoxOverlay", "OverlayStack", "Quad"]
+__all__ = ["BoxContent", "BoxOverlay", "OverlayStack", "Quad", "ShapeOverlay"]

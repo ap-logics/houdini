@@ -110,9 +110,111 @@ class OverlayStack:
         return out
 
 
+class ShapeOverlay:
+    """One BoxContent composited into an arbitrary closed polygon region.
+
+    The shape is defined as a list of normalised [0,1] points (any N >= 3).
+    Freehand strokes with overlapping or self-intersecting paths are handled
+    correctly via OpenCV's non-zero winding fill rule.
+
+    Call set_polygon() once when the shape is finalised, or every frame for
+    live updates. The rasterised mask is cached and only rebuilt on change.
+    """
+
+    def __init__(self, content: BoxContent, alpha: float = 1.0) -> None:
+        self.content = content
+        self.alpha = alpha
+        self._points: list[tuple[float, float]] = []
+        self._simplified: np.ndarray | None = None   # (N,1,2) int32, pixel space
+        self._mask_cache: np.ndarray | None = None   # float32 (fh, fw, 1)
+        self._cache_frame_shape: tuple[int, int] | None = None
+
+    def set_polygon(self, points: list[tuple[float, float]]) -> None:
+        """Update the shape boundary.
+
+        Args:
+            points: closed path in normalised [0,1] coords.  The path does not
+                    need to be explicitly closed (first == last); any freehand
+                    stroke is accepted.  Self-intersections are filled via the
+                    non-zero winding rule.
+        """
+        self._points = points
+        self._simplified = None   # will be rebuilt at next render
+        self._mask_cache = None
+
+    def update(self, dt: float) -> None:
+        self.content.update(dt)
+
+    def render(self, frame: np.ndarray) -> np.ndarray:
+        if len(self._points) < 3:
+            return frame
+
+        fh, fw = frame.shape[:2]
+
+        if self._mask_cache is None or self._cache_frame_shape != (fh, fw):
+            self._mask_cache = _build_shape_mask(self._points, fw, fh)
+            self._cache_frame_shape = (fh, fw)
+
+        return _composite_shape(frame, self.content, self._points,
+                                self._mask_cache, self.alpha)
+
+
 # ---------------------------------------------------------------------------
-# Internal compositing helper
+# Internal compositing helpers
 # ---------------------------------------------------------------------------
+
+
+def _build_shape_mask(
+    points: list[tuple[float, float]],
+    fw: int,
+    fh: int,
+) -> np.ndarray:
+    """Rasterise a normalised polygon into a full-frame float32 mask (fh,fw,1)."""
+    pts_px = np.array([(x * fw, y * fh) for x, y in points], dtype=np.float32)
+    # Simplify freehand strokes; epsilon=2px keeps visual fidelity
+    simplified = cv2.approxPolyDP(pts_px, epsilon=2.0, closed=True)
+    mask = np.zeros((fh, fw), dtype=np.uint8)
+    cv2.fillPoly(mask, [simplified.astype(np.int32)], 255)
+    return (mask.astype(np.float32) / 255.0)[:, :, np.newaxis]
+
+
+def _composite_shape(
+    frame: np.ndarray,
+    content: BoxContent,
+    points: list[tuple[float, float]],
+    full_mask: np.ndarray,
+    alpha: float,
+) -> np.ndarray:
+    fh, fw = frame.shape[:2]
+    pts_px = np.array([(x * fw, y * fh) for x, y in points], dtype=np.float32)
+
+    x0 = max(0, int(np.floor(pts_px[:, 0].min())))
+    y0 = max(0, int(np.floor(pts_px[:, 1].min())))
+    x1 = min(fw, int(np.ceil(pts_px[:, 0].max())))
+    y1 = min(fh, int(np.ceil(pts_px[:, 1].max())))
+    bw, bh = x1 - x0, y1 - y0
+    if bw <= 0 or bh <= 0:
+        return frame
+
+    roi = frame[y0:y1, x0:x1].copy()
+    content_frame = content.render(bw, bh, roi)
+
+    if content_frame.ndim == 3 and content_frame.shape[2] == 4:
+        content_alpha = content_frame[:, :, 3:4].astype(np.float32) / 255.0
+        content_bgr = content_frame[:, :, :3]
+    else:
+        content_alpha = np.ones((bh, bw, 1), dtype=np.float32)
+        content_bgr = content_frame
+
+    mask_crop = full_mask[y0:y1, x0:x1]   # (bh, bw, 1) — no copy needed
+    combined = mask_crop * content_alpha * alpha
+
+    result = frame.copy()
+    result[y0:y1, x0:x1] = (
+        content_bgr.astype(np.float32) * combined
+        + roi.astype(np.float32) * (1.0 - combined)
+    ).astype(np.uint8)
+    return result
 
 def _composite_quad(
     frame: np.ndarray,

@@ -50,6 +50,19 @@ def render(self, w: int, h: int, roi: np.ndarray | None) -> np.ndarray: ...
 
 **Live corner updates:** `overlay.set_region(i, new_quad)` — safe to call every frame.
 
+**Arbitrary shape regions — `ShapeOverlay`:**
+```python
+from overlay import ShapeOverlay
+
+shape = ShapeOverlay(content, alpha=0.8)
+shape.set_polygon([(x0,y0), (x1,y1), ...])  # normalised 0–1 points, any N >= 3
+stack.add(shape)
+```
+- Points are a closed path in normalised `[0,1]` coords — no need to repeat the first point at the end
+- Self-intersecting / overlapping paths are fine; interior filled via non-zero winding rule
+- `set_polygon()` simplifies the stroke with `cv2.approxPolyDP` and caches the rasterised mask — call it once for static shapes, or every frame for live updates
+- Content fills the bounding box then is clipped to the polygon; no perspective warp
+
 **Content types:**
 - `overlay.effects.SolidContent(color)` — flat BGR fill ✅
 - `overlay.video.VideoContent(path)` — mp4 loop (stub)

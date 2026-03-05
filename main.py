@@ -1,8 +1,10 @@
+import math
 import time
 import cv2
 from camera import open_camera
 from hands import get_hands, draw_skeleton
-from overlay import OverlayStack, BoxOverlay
+from overlay import OverlayStack, BoxOverlay, ShapeOverlay
+from overlay.effects import SolidContent
 from overlay.effects.xray import XRayContent
 
 COLORS = [
@@ -37,9 +39,26 @@ def _sync_overlays(
             ov.alpha = 0.0
 
 
+def _star_polygon(
+    cx: float, cy: float, outer_r: float, inner_r: float, points: int = 5
+) -> list[tuple[float, float]]:
+    """Return a normalised star polygon (alternating outer/inner vertices)."""
+    verts = []
+    for i in range(points):
+        for r, angle_offset in ((outer_r, 0), (inner_r, math.pi / points)):
+            angle = -math.pi / 2 + i * 2 * math.pi / points + angle_offset
+            verts.append((cx + r * math.cos(angle), cy + r * math.sin(angle)))
+    return verts
+
+
 def main():
     stack = OverlayStack()
     overlays: list[BoxOverlay] = []
+
+    # ShapeOverlay example — a star in the top-left corner
+    star = ShapeOverlay(SolidContent((0, 200, 255)), alpha=0.75)
+    star.set_polygon(_star_polygon(cx=0.15, cy=0.15, outer_r=0.10, inner_r=0.04))
+    stack.add(star)
 
     with open_camera() as cam:
         prev = time.time()
@@ -47,6 +66,7 @@ def main():
             frame = cam.read()
             if frame is None:
                 continue
+            frame = cv2.flip(frame, 1)
 
             now = time.time()
             dt, prev = now - prev, now
