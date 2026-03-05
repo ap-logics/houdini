@@ -1,4 +1,5 @@
 import os
+import cv2
 import numpy as np
 import mediapipe as mp
 from mediapipe.tasks.python import BaseOptions
@@ -162,3 +163,21 @@ def get_hands(frame: np.ndarray) -> list | None:
             del _smooth_dz[k]
 
     return people
+
+
+def draw_skeleton(
+    frame: np.ndarray,
+    people: list,
+    colors: list[tuple[int, int, int]],
+) -> None:
+    """Draw hand landmarks and connections onto frame in-place."""
+    h, w = frame.shape[:2]
+    for i, person in enumerate(people):
+        color = colors[i % len(colors)]
+        for landmarks in person["hands"]:
+            for a, b in HAND_CONNECTIONS:
+                pt1 = (int(landmarks[a][0] * w), int(landmarks[a][1] * h))
+                pt2 = (int(landmarks[b][0] * w), int(landmarks[b][1] * h))
+                cv2.line(frame, pt1, pt2, color, 2)
+            for lx, ly in landmarks:
+                cv2.circle(frame, (int(lx * w), int(ly * h)), 3, color, -1)
