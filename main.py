@@ -3,9 +3,9 @@ import cv2
 from camera import open_camera
 from hands import get_hands
 from overlay import OverlayStack, BoxOverlay
-from overlay.effects.solid import SolidContent
+from overlay.effects.obj_content import ObjContent
 
-COLORS = [(0, 200, 255), (255, 100, 0), (0, 255, 150), (200, 0, 255)]
+OBJ_PATH = "objects/gun.obj"
 
 def main():
     stack = OverlayStack()
@@ -27,12 +27,12 @@ def main():
                 for i, person in enumerate(people):
                     quad = tuple(tuple(p) for p in person["box"])
                     if i >= len(overlays):
-                        ov = BoxOverlay(SolidContent(COLORS[i % len(COLORS)]), alpha=0.5)
+                        ov = BoxOverlay(ObjContent(OBJ_PATH), alpha=0.9)
                         ov.add_region(quad)
                         stack.add(ov)
                         overlays.append(ov)
                     else:
-                        overlays[i].alpha = 0.5
+                        overlays[i].alpha = 0.9
                         overlays[i].set_region(0, quad)
                 for i in range(len(people), len(overlays)):
                     overlays[i].alpha = 0.0
